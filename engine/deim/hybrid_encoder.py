@@ -376,21 +376,27 @@ class HybridEncoder(nn.Module):
 
     @staticmethod
     def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.):
+        """Sin-cos embedding in the row-major token order of feature.flatten(2).
+
+        The original meshgrid(grid_w, grid_h) flattened in (w, h) order. For square maps that
+        only puts the row index in the first half of the channels and the column index in the
+        second; for non-square maps (e.g. 6x56) it scrambles positions. Rows still fill the
+        first half and columns the second, so square maps, and pretrained weights, get exactly
+        the same embedding as before.
         """
-        """
-        grid_w = torch.arange(int(w), dtype=torch.float32)
-        grid_h = torch.arange(int(h), dtype=torch.float32)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing='ij')
+        grid_row = torch.arange(int(h), dtype=torch.float32)
+        grid_col = torch.arange(int(w), dtype=torch.float32)
+        grid_row, grid_col = torch.meshgrid(grid_row, grid_col, indexing='ij')
         assert embed_dim % 4 == 0, \
             'Embed dimension must be divisible by 4 for 2D sin-cos position embedding'
         pos_dim = embed_dim // 4
         omega = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
         omega = 1. / (temperature ** omega)
 
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
+        out_row = grid_row.flatten()[..., None] @ omega[None]
+        out_col = grid_col.flatten()[..., None] @ omega[None]
 
-        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+        return torch.concat([out_row.sin(), out_row.cos(), out_col.sin(), out_col.cos()], dim=1)[None, :, :]
 
     def forward(self, feats):
         assert len(feats) == len(self.in_channels)
